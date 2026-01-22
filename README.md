@@ -5,8 +5,10 @@ This repository demonstrates a simple Retrieval-Augmented Generation (RAG) pipel
 - Ollama for embeddings and LLM inference
 - LangChain-style tooling for document loading, splitting and vector storage
 
-
 The main script is `test.py`.
+
+> [!NOTE]
+> This is a proof of concept that I did just to learn how embeddings work and how to use them for document retrieval and generation tasks. It is not meant as a production-ready solution.
 
 ## Quick overview
 
