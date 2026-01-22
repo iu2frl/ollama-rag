@@ -5,6 +5,9 @@ from langchain_community.document_loaders import WebBaseLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import SKLearnVectorStore
 from langchain_ollama import OllamaEmbeddings
+from langchain_ollama import ChatOllama
+from langchain_core.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 
 
 # Set up logging
@@ -27,15 +30,15 @@ urls = [u.strip("<>") for u in urls]
 docs = []
 for url in urls:
     try:
-        logger.info(f"Loading URL: {url}")
+        logger.info("Loading URL: %s", url)
         before = len(docs)
         loaded = WebBaseLoader(url).load()
         docs.extend(loaded)
         logger.info(
-            f"Loaded {len(loaded)} documents from {url} (total {len(docs)})"
+            "Loaded %d documents from %s (total %d)", len(loaded), url, len(docs)
         )
     except Exception as e:
-        logger.exception(f"Failed to load {url!r}")
+        logger.exception("Failed to load %r", url)
 
 # Flattened list of loaded documents
 docs_list = docs
@@ -46,7 +49,7 @@ text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
 )
 # Split the documents into chunks
 doc_splits = text_splitter.split_documents(docs_list)
-logger.info(f"Split documents into {len(doc_splits)} chunks")
+logger.info("Split documents into %d chunks", len(doc_splits))
 
 
 
@@ -60,11 +63,11 @@ except Exception as e:
     raise
 
 persist_path = "data/embeddings.json"
-logger.info(f"Using persist path: {persist_path}")
+logger.info("Using persist path: %s", persist_path)
 os.makedirs(os.path.dirname(persist_path), exist_ok=True)
 
 if os.path.exists(persist_path):
-    logger.info(f"Loading persisted vector store from {persist_path}")
+    logger.info("Loading persisted vector store from %s", persist_path)
     vectorstore = SKLearnVectorStore(embedding=ollama_emb, persist_path=persist_path)
 else:
     logger.info("Building vector store and persisting to disk")
@@ -76,10 +79,6 @@ else:
 
 retriever = vectorstore.as_retriever(k=4)
 logger.info("Retriever initialized (k=4)")
-
-from langchain_ollama import ChatOllama
-from langchain_core.prompts import PromptTemplate
-from langchain_core.output_parsers import StrOutputParser
 
 # Define the prompt template for the LLM
 prompt = PromptTemplate(
@@ -95,7 +94,8 @@ prompt = PromptTemplate(
     input_variables=["question", "documents"],
 )
 
-# Initialize the LLM with Deepscaler model
+# Initialize the LLM with the Aya Expanse model
+# which was trained across a big number of languages
 llm = ChatOllama(
     model="aya-expanse",
     temperature=0,
@@ -110,22 +110,22 @@ class RAGApplication:
         self.retriever = retriever
         self.rag_chain = rag_chain
     def run(self, question):
-        logger.info(f"Retrieving documents for question: {question}")
+        logger.info("Retrieving documents for question: %s", question)
         # Retrieve relevant documents
         documents = self.retriever.invoke(question)
-        logger.info(f"Retrieved {len(documents)} documents")
+        logger.info("Retrieved %d documents", len(documents))
         # Extract content from retrieved documents
         doc_texts = "\n".join([doc.page_content for doc in documents])
         # Get the answer from the language model
-        answer = self.rag_chain.invoke({"question": question, "documents": doc_texts})
-        logger.info(f"RAG answer generated")
-        return answer
+        model_answer = self.rag_chain.invoke({"question": question, "documents": doc_texts})
+        logger.info("RAG answer generated")
+        return model_answer
 
 # Initialize the RAG application
 rag_application = RAGApplication(retriever, rag_chain)
+
 # Example usage
-#question = "What is prompt engineering"
-question = "Cosa è il prompt engineering?"
-answer = rag_application.run(question)
-logger.info(f"Question: {question}")
-logger.info(f"Answer: {answer}")
+QUESTION = "Cosa è il prompt engineering?"
+answer = rag_application.run(QUESTION)
+logger.info("Question: %s", QUESTION)
+logger.info("Answer: %s", answer)
