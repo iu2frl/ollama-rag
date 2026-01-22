@@ -1,5 +1,17 @@
+import os
+import logging
+
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import SKLearnVectorStore
+from langchain_ollama import OllamaEmbeddings
+
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 # List of URLs to load documents from
 urls = [
@@ -15,9 +27,15 @@ urls = [u.strip("<>") for u in urls]
 docs = []
 for url in urls:
     try:
-        docs.extend(WebBaseLoader(url).load())
+        logger.info(f"Loading URL: {url}")
+        before = len(docs)
+        loaded = WebBaseLoader(url).load()
+        docs.extend(loaded)
+        logger.info(
+            f"Loaded {len(loaded)} documents from {url} (total {len(docs)})"
+        )
     except Exception as e:
-        print(f"Failed to load {url!r}: {e}")
+        logger.exception(f"Failed to load {url!r}")
 
 # Flattened list of loaded documents
 docs_list = docs
@@ -28,23 +46,36 @@ text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
 )
 # Split the documents into chunks
 doc_splits = text_splitter.split_documents(docs_list)
+logger.info(f"Split documents into {len(doc_splits)} chunks")
 
-from langchain_community.vectorstores import SKLearnVectorStore
-from langchain_ollama import OllamaEmbeddings
+
 
 # Create embeddings for documents using the local Ollama qwen3 embedding model
 try:
+    logger.info("Initializing OllamaEmbeddings model 'qwen3-embedding'")
     ollama_emb = OllamaEmbeddings(model="qwen3-embedding", validate_model_on_init=True)
+    logger.info("OllamaEmbeddings initialized")
 except Exception as e:
-    print(f"Failed to initialize OllamaEmbeddings: {e}")
+    logger.exception("Failed to initialize OllamaEmbeddings")
     raise
 
-vectorstore = SKLearnVectorStore.from_documents(
-    documents=doc_splits,
-    embedding=ollama_emb,
-)
+persist_path = "data/embeddings.json"
+logger.info(f"Using persist path: {persist_path}")
+os.makedirs(os.path.dirname(persist_path), exist_ok=True)
+
+if os.path.exists(persist_path):
+    logger.info(f"Loading persisted vector store from {persist_path}")
+    vectorstore = SKLearnVectorStore(embedding=ollama_emb, persist_path=persist_path)
+else:
+    logger.info("Building vector store and persisting to disk")
+    vectorstore = SKLearnVectorStore.from_documents(
+        documents=doc_splits, embedding=ollama_emb, persist_path=persist_path
+    )
+    vectorstore.persist()
+    logger.info("Vector store built and persisted")
 
 retriever = vectorstore.as_retriever(k=4)
+logger.info("Retriever initialized (k=4)")
 
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import PromptTemplate
@@ -55,6 +86,7 @@ prompt = PromptTemplate(
     template="""You are an assistant for question-answering tasks.
     Use the following documents to answer the question.
     If you don't know the answer, just say that you don't know.
+    Make sure to reply using exactly the same language as the question.
     Use three sentences maximum and keep the answer concise:
     Question: {question}
     Documents: {documents}
@@ -65,7 +97,7 @@ prompt = PromptTemplate(
 
 # Initialize the LLM with Deepscaler model
 llm = ChatOllama(
-    model="deepscaler",
+    model="aya-expanse",
     temperature=0,
 )
 
@@ -78,18 +110,22 @@ class RAGApplication:
         self.retriever = retriever
         self.rag_chain = rag_chain
     def run(self, question):
+        logger.info(f"Retrieving documents for question: {question}")
         # Retrieve relevant documents
         documents = self.retriever.invoke(question)
+        logger.info(f"Retrieved {len(documents)} documents")
         # Extract content from retrieved documents
-        doc_texts = "\\n".join([doc.page_content for doc in documents])
+        doc_texts = "\n".join([doc.page_content for doc in documents])
         # Get the answer from the language model
         answer = self.rag_chain.invoke({"question": question, "documents": doc_texts})
+        logger.info(f"RAG answer generated")
         return answer
 
 # Initialize the RAG application
 rag_application = RAGApplication(retriever, rag_chain)
 # Example usage
-question = "What is prompt engineering"
+#question = "What is prompt engineering"
+question = "Cosa è il prompt engineering?"
 answer = rag_application.run(question)
-print("Question:", question)
-print("Answer:", answer)
+logger.info(f"Question: {question}")
+logger.info(f"Answer: {answer}")
