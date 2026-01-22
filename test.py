@@ -30,12 +30,18 @@ text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
 doc_splits = text_splitter.split_documents(docs_list)
 
 from langchain_community.vectorstores import SKLearnVectorStore
-from langchain_openai import OpenAIEmbeddings
+from langchain_ollama import OllamaEmbeddings
 
-# Create embeddings for documents and store them in a vector store
+# Create embeddings for documents using the local Ollama qwen3 embedding model
+try:
+    ollama_emb = OllamaEmbeddings(model="qwen3-embedding", validate_model_on_init=True)
+except Exception as e:
+    print(f"Failed to initialize OllamaEmbeddings: {e}")
+    raise
+
 vectorstore = SKLearnVectorStore.from_documents(
     documents=doc_splits,
-    embedding=OpenAIEmbeddings(openai_api_key="api_key"),
+    embedding=ollama_emb,
 )
 
 retriever = vectorstore.as_retriever(k=4)
