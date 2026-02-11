@@ -24,7 +24,7 @@ jsonpointer==3.0.0
 langchain==1.2.6
 langchain-classic==1.0.1
 langchain-community==0.4.1
-langchain-core==1.2.7
+langchain-core==1.2.11
 langchain-ollama==1.0.1
 langchain-openai==1.1.7
 langchain-text-splitters==1.1.0
